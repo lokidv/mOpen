@@ -34,17 +34,15 @@ sudo apt-get install -y nodejs
 sudo npm install pm2@latest -g
 
 # Clone a Node.js Express application repository (Replace with your actual repo)
-git clone https://github.com/username/express-app.git /opt/express-app
-cd /opt/express-app
+git clone https://github.com/lokidv/mOpen.git /opt/mopen
+cd /opt/mopen
 
 # Install dependencies
 npm install
 
 # Write out the environment variables to /etc/environment so they persist
-{
-  echo "PORT=${PORT}"
-  echo "API_PASSWORD=${API_PASSWORD}"
-} | sudo tee -a /etc/environment > /dev/null
+export PORT=${PORT}
+export API_PASSWORD=${API_PASSWORD}
 
 # Reload environment variables
 source /etc/environment
