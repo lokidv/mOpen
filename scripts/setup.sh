@@ -12,10 +12,11 @@ if [ -z "$API_PASSWORD" ]; then
   exit 1
 fi
 
-
 # Export the PORT as an environment variable for future use
 export PORT
 export API_PASSWORD
+
+sed -i "s/#\$nrconf{kernelhints} = -1;/\$nrconf{kernelhints} = -1;/g" /etc/needrestart/needrestart.conf
 
 # Install required dependencies for running the script
 sudo apt-get update -y
