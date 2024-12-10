@@ -147,74 +147,85 @@ app.get("/create", (req, res) => {
       { encoding: "utf8" }
     );
     clientExists = parseInt(output.trim()) === 1;
+    if (clientExists) {
+      try {
+        process.chdir("/etc/openvpn/easy-rsa/");
+        execSync(`./easyrsa --batch revoke "${client}"`, { stdio: "ignore" });
+        execSync("EASYRSA_CRL_DAYS=3650 ./easyrsa gen-crl", {
+          stdio: "ignore",
+        });
+        fs.unlinkSync("/etc/openvpn/crl.pem");
+        fs.copyFileSync(
+          "/etc/openvpn/easy-rsa/pki/crl.pem",
+          "/etc/openvpn/crl.pem"
+        );
+        fs.chmodSync("/etc/openvpn/crl.pem", 0o644);
+        execSync(`find ${CLIENTS_DIR} -name "${client}.ovpn" -delete`);
+        execSync(`sed -i "/^${client},.*/d" /etc/openvpn/ipp.txt`);
+        execSync(
+          "cp /etc/openvpn/easy-rsa/pki/index.txt /etc/openvpn/easy-rsa/pki/index.txt.bk"
+        );
+      } catch (error) {
+        console.error("Error revoking client certificate:", error.message);
+      }
+    }
   } catch (error) {
     // Ignore error
   }
 
-  if (clientExists) {
-    return res.status(400).json({
-      error:
-        "The specified client CN already exists. Please choose another name.",
-    });
-  } else {
-    try {
-      process.chdir("/etc/openvpn/easy-rsa/");
-    } catch (error) {
-      console.error("Error changing directory to /etc/openvpn/easy-rsa/");
-      return res.status(500).json({ error: "Server error" });
-    }
+  try {
+    process.chdir("/etc/openvpn/easy-rsa/");
+  } catch (error) {
+    console.error("Error changing directory to /etc/openvpn/easy-rsa/");
+    return res.status(500).json({ error: "Server error" });
+  }
 
-    try {
-      // Since we cannot provide a password non-interactively, we only support passwordless clients
-      execSync(
-        `EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "${client}" nopass`,
-        { stdio: "ignore" }
-      );
-    } catch (error) {
-      console.error("Error creating client certificate:", error.message);
-      return res
-        .status(500)
-        .json({ error: "Error creating client certificate" });
-    }
+  try {
+    // Since we cannot provide a password non-interactively, we only support passwordless clients
+    execSync(
+      `EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "${client}" nopass`,
+      { stdio: "ignore" }
+    );
+  } catch (error) {
+    console.error("Error creating client certificate:", error.message);
+    return res.status(500).json({ error: "Error creating client certificate" });
+  }
 
-    const TLS_SIG = getTLSSig();
-    if (!TLS_SIG) {
-      return res
-        .status(500)
-        .json({ error: "Could not determine TLS signature method" });
-    }
+  const TLS_SIG = getTLSSig();
+  if (!TLS_SIG) {
+    return res
+      .status(500)
+      .json({ error: "Could not determine TLS signature method" });
+  }
 
-    // Generate the custom client.ovpn
-    try {
-      const template = fs.readFileSync(
-        "/etc/openvpn/client-template.txt",
-        "utf8"
-      );
-      const caCert = fs.readFileSync("/etc/openvpn/ca.crt", "utf8");
-      const clientCertFull = fs.readFileSync(
-        `/etc/openvpn/easy-rsa/pki/issued/${client}.crt`,
-        "utf8"
-      );
-      const clientCert = clientCertFull.match(
-        /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/
-      )[0];
-      const clientKey = fs.readFileSync(
-        `/etc/openvpn/easy-rsa/pki/private/${client}.key`,
-        "utf8"
-      );
-      let tlsSigContent = "";
-      if (TLS_SIG === "1") {
-        const tlsCryptKey = fs.readFileSync(
-          "/etc/openvpn/tls-crypt.key",
-          "utf8"
-        );
-        tlsSigContent = `<tls-crypt>\n${tlsCryptKey}\n</tls-crypt>`;
-      } else if (TLS_SIG === "2") {
-        const tlsAuthKey = fs.readFileSync("/etc/openvpn/tls-auth.key", "utf8");
-        tlsSigContent =
-          "key-direction 1\n<tls-auth>\n" + tlsAuthKey + "\n</tls-auth>";
-      }
-      const ovpnContent = `${template}
+  // Generate the custom client.ovpn
+  try {
+    const template = fs.readFileSync(
+      "/etc/openvpn/client-template.txt",
+      "utf8"
+    );
+    const caCert = fs.readFileSync("/etc/openvpn/ca.crt", "utf8");
+    const clientCertFull = fs.readFileSync(
+      `/etc/openvpn/easy-rsa/pki/issued/${client}.crt`,
+      "utf8"
+    );
+    const clientCert = clientCertFull.match(
+      /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/
+    )[0];
+    const clientKey = fs.readFileSync(
+      `/etc/openvpn/easy-rsa/pki/private/${client}.key`,
+      "utf8"
+    );
+    let tlsSigContent = "";
+    if (TLS_SIG === "1") {
+      const tlsCryptKey = fs.readFileSync("/etc/openvpn/tls-crypt.key", "utf8");
+      tlsSigContent = `<tls-crypt>\n${tlsCryptKey}\n</tls-crypt>`;
+    } else if (TLS_SIG === "2") {
+      const tlsAuthKey = fs.readFileSync("/etc/openvpn/tls-auth.key", "utf8");
+      tlsSigContent =
+        "key-direction 1\n<tls-auth>\n" + tlsAuthKey + "\n</tls-auth>";
+    }
+    const ovpnContent = `${template}
 <ca>
 ${caCert}
 </ca>
@@ -227,22 +238,18 @@ ${clientKey}
 ${tlsSigContent}
 `;
 
-      const clientConfigPath = path.join(CLIENTS_DIR, `${client}.ovpn`);
-      fs.writeFileSync(clientConfigPath, ovpnContent);
+    const clientConfigPath = path.join(CLIENTS_DIR, `${client}.ovpn`);
+    fs.writeFileSync(clientConfigPath, ovpnContent);
 
-      // Send the .ovpn file content as response (Base64 encoded)
-      const ovpnFileBase64 = Buffer.from(ovpnContent).toString("base64");
+    // Send the .ovpn file content as response (Base64 encoded)
+    const ovpnFileBase64 = Buffer.from(ovpnContent).toString("base64");
 
-      return res.json({
-        message: `Client ${client} added.`,
-        ovpnFileBase64,
-      });
-    } catch (error) {
-      console.error("Error generating client configuration:", error.message);
-      return res
-        .status(500)
-        .json({ error: "Error generating client configuration" });
-    }
+    return res.send(ovpnContent);
+  } catch (error) {
+    console.error("Error generating client configuration:", error.message);
+    return res
+      .status(500)
+      .json({ error: "Error generating client configuration" });
   }
 });
 
@@ -272,10 +279,20 @@ app.get("/remove", (req, res) => {
       "cp /etc/openvpn/easy-rsa/pki/index.txt /etc/openvpn/easy-rsa/pki/index.txt.bk"
     );
 
-    return res.json({ message: `Certificate for client ${client} revoked.` });
+    return res.json({ deleted: true });
   } catch (error) {
     console.error("Error revoking client certificate:", error.message);
-    return res.status(500).json({ error: "Error revoking client certificate" });
+    return res.json({ deleted: false });
+  }
+});
+
+app.get("/list", async (req, res) => {
+  try {
+    const files = await fs.promises.readdir(CLIENTS_DIR);
+    const filenamesWithoutExt = files.map((file) => path.parse(file).name);
+    res.json(filenamesWithoutExt);
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
   }
 });
 
@@ -305,12 +322,6 @@ app.get("/list/:clientName", (req, res) => {
       .json({ error: "Error reading client configuration" });
   }
 
-  // Set the response headers as per your requirement
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename=${clientName}.ovpn`
-  );
-  res.setHeader("Content-Type", "text/plain");
   res.send(configContent);
 });
 
