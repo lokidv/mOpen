@@ -10,7 +10,7 @@ async function bootstrap() {
   app.use("/", ovpn);
 
   // Ensure the server starts listening
-  app.listen(process.env.PORT || 3000, () => {
+  app.listen(process.env.API_PORT || 3000, () => {
     console.log("Server is running");
   });
 }

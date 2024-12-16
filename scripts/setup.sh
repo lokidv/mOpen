@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Ask the user for the application port
-read -p "Enter the port for the Node.js Express app (default: 3000): " PORT
-PORT=${PORT:-3000}
+read -p "Enter the port for the Node.js Express app (default: 3000): " API_PORT
+API_PORT=${API_PORT:-3000}
 
 # Ask for the API_PASSWORD
 read -s -p "Enter API_PASSWORD (no default, required): " API_PASSWORD
@@ -12,9 +12,6 @@ if [ -z "$API_PASSWORD" ]; then
   exit 1
 fi
 
-# Export the PORT as an environment variable for future use
-export PORT
-export API_PASSWORD
 
 sed -i "s/#\$nrconf{kernelhints} = -1;/\$nrconf{kernelhints} = -1;/g" /etc/needrestart/needrestart.conf
 
@@ -42,7 +39,7 @@ cd /opt/mopen
 npm install
 
 # Write out the environment variables to /etc/environment so they persist
-export PORT=${PORT}
+export API_PORT=${API_PORT}
 export API_PASSWORD=${API_PASSWORD}
 
 # Reload environment variables
