@@ -12,6 +12,111 @@ if (!fs.existsSync(CLIENTS_DIR)) {
   fs.mkdirSync(CLIENTS_DIR, { recursive: true });
 }
 
+function tunAvailable() {
+  return fs.existsSync("/dev/net/tun");
+}
+
+// Parse the /etc/os-release file
+function parseOSRelease(content) {
+  const lines = content.split("\n");
+  const result = {};
+  lines.forEach((line) => {
+    line = line.trim();
+    if (line && line.includes("=")) {
+      const parts = line.split("=");
+      const key = parts[0];
+      let value = parts.slice(1).join("=");
+      // Remove quotes if any
+      value = value.replace(/^"(.*)"$/, "$1");
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
+// Check the operating system
+function checkOS() {
+  let OS = "";
+  let ID = "";
+  let VERSION_ID = "";
+  let ID_LIKE = "";
+
+  if (fs.existsSync("/etc/debian_version")) {
+    OS = "debian";
+    const osRelease = fs.readFileSync("/etc/os-release", "utf8");
+    const osInfo = parseOSRelease(osRelease);
+    ID = osInfo.ID;
+    VERSION_ID = osInfo.VERSION_ID;
+
+    if (ID === "debian" || ID === "raspbian") {
+      if (parseFloat(VERSION_ID) < 9) {
+        return {
+          supported: false,
+          message:
+            "Your version of Debian is not supported. Please use Debian 9 or newer.",
+        };
+      }
+    } else if (ID === "ubuntu") {
+      OS = "ubuntu";
+      const MAJOR_UBUNTU_VERSION = parseInt(VERSION_ID.split(".")[0], 10);
+      if (MAJOR_UBUNTU_VERSION < 16) {
+        return {
+          supported: false,
+          message:
+            "Your version of Ubuntu is not supported. Please use Ubuntu 16.04 or newer.",
+        };
+      }
+    }
+  } else if (fs.existsSync("/etc/system-release")) {
+    const osRelease = fs.readFileSync("/etc/os-release", "utf8");
+    const osInfo = parseOSRelease(osRelease);
+    ID = osInfo.ID;
+    VERSION_ID = osInfo.VERSION_ID;
+    ID_LIKE = osInfo.ID_LIKE;
+
+    if (ID === "fedora" || ID_LIKE === "fedora") {
+      OS = "fedora";
+    }
+    if (["centos", "rocky", "almalinux"].includes(ID)) {
+      OS = "centos";
+      if (parseInt(VERSION_ID.split(".")[0], 10) < 7) {
+        return {
+          supported: false,
+          message: "Your version of CentOS is not supported.",
+        };
+      }
+    }
+    if (ID === "ol") {
+      OS = "oracle";
+      if (!VERSION_ID.includes("8")) {
+        return {
+          supported: false,
+          message: "Your version of Oracle Linux is not supported.",
+        };
+      }
+    }
+    if (ID === "amzn") {
+      OS = "amzn";
+      if (VERSION_ID !== "2") {
+        return {
+          supported: false,
+          message: "Your version of Amazon Linux is not supported.",
+        };
+      }
+    }
+  } else if (fs.existsSync("/etc/arch-release")) {
+    OS = "arch";
+  } else {
+    return {
+      supported: false,
+      message:
+        "Unsupported system. Supported systems are Debian, Ubuntu, Fedora, CentOS, Amazon Linux 2, Oracle Linux 8, or Arch Linux.",
+    };
+  }
+
+  return { supported: true, OS };
+}
+
 // Determine if we use tls-auth or tls-crypt
 function getTLSSig() {
   try {
@@ -26,7 +131,6 @@ function getTLSSig() {
     return null;
   }
 }
-
 app.get("/create", (req, res) => {
   const client = req.query.publicKey;
 
@@ -70,12 +174,20 @@ app.get("/create", (req, res) => {
   }
 
   try {
+    process.chdir("/etc/openvpn/easy-rsa/");
+  } catch (error) {
+    console.error("Error changing directory to /etc/openvpn/easy-rsa/");
+    return res.status(500).json({ error: "Server error" });
+  }
+
+  try {
+    // Since we cannot provide a password non-interactively, we only support passwordless clients
     execSync(
-      `EASYRSA_CERT_EXPIRE=3650 /etc/openvpn/easy-rsa/easyrsa --batch build-client-full "${client}" nopass`,
+      `EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "${client}" nopass`,
       { stdio: "ignore" }
     );
   } catch (error) {
-    console.error("Error creating client certificate:", error);
+    console.error("Error creating client certificate:", error.message);
     return res.status(500).json({ error: "Error creating client certificate" });
   }
 

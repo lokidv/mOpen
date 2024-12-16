@@ -51,5 +51,5 @@ pm2 start ./src/app.js --name "express-app" --env "production"
 pm2 save
 
 echo "Setup complete."
-echo "OpenVPN installation done, and Node.js Express app is running on port $PORT."
+echo "OpenVPN installation done, and Node.js Express app is running on port $API_PORT."
 echo "Use 'pm2 list' to manage your PM2 processes."
