@@ -20,9 +20,7 @@ sudo apt-get update -y
 sudo apt-get install -y curl git
 
 # Run the OpenVPN install script
-curl -O https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh
-chmod +x openvpn-install.sh
-./openvpn-install.sh
+bash <(curl -Ls https://raw.githubusercontent.com/angristan/openvpn-install/master/openvpn-install.sh)
 
 # Install Node.js LTS via NodeSource
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
