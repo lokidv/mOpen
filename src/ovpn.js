@@ -71,7 +71,7 @@ app.get("/create", (req, res) => {
 
   try {
     execSync(
-      `EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "${client}" nopass`,
+      `EASYRSA_CERT_EXPIRE=3650 /etc/openvpn/easy-rsa/easyrsa --batch build-client-full "${client}" nopass`,
       { stdio: "ignore" }
     );
   } catch (error) {
