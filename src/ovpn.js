@@ -174,14 +174,14 @@ app.get("/create", (req, res) => {
   }
 
   try {
-    process.chdir("/etc/openvpn/easy-rsa/");
+    process.chdir("/etc/openvpn/easy-rsa");
   } catch (error) {
     console.error("Error changing directory to /etc/openvpn/easy-rsa/");
     return res.status(500).json({ error: "Server error" });
   }
 
   try {
-    // Since we cannot provide a password non-interactively, we only support passwordless clients
+    process.chdir("/etc/openvpn/easy-rsa");
     execSync(
       `EASYRSA_CERT_EXPIRE=3650 ./easyrsa --batch build-client-full "${client}" nopass`,
       { stdio: "ignore" }
